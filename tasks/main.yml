@@ -8,7 +8,7 @@
   - no_reboot_needed | bool
   - restrict_strategy | bool
   - rpm_verify_hashes | bool
-  - ansible_distribution == "Fedora"
+  - ansible_distribution == "Fedora" or ansible_distribution == "Rocky"
   tags:
   - CCE-90841-8
   - CJIS-5.10.4.1
@@ -464,7 +464,7 @@
   - no_reboot_needed | bool
   - restrict_strategy | bool
   - ansible_virtualization_type not in ["docker", "lxc", "openvz", "podman", "container"]
-  - ansible_os_family == "RedHat" or ansible_os_family == "Suse"
+  - ansible_os_family == "RedHat" or ansible_os_family == "Suse" or ansible_os_family == "Rocky"
   tags:
   - CCE-83437-4
   - CJIS-5.10.1.3
@@ -1686,8 +1686,39 @@
   - no_reboot_needed | bool
   - restrict_strategy | bool
 
+- name: Read signatures in GPG key (find)
+  find:
+    paths: /etc/pki/rpm-gpg/
+    patterns: "RPM-GPG-KEY*"
+  register: rpm_gpg_files
+  changed_when: false
+  check_mode: false
+  tags:
+  - CCE-84180-9
+  - CJIS-5.10.4.1
+  - NIST-800-171-3.4.8
+  - NIST-800-53-CM-5(3)
+  - NIST-800-53-CM-6(a)
+  - NIST-800-53-SC-12
+  - NIST-800-53-SC-12(3)
+  - NIST-800-53-SI-7
+  - PCI-DSS-Req-6.2
+  - ensure_redhat_gpgkey_installed
+  - high_severity
+  - medium_complexity
+  - medium_disruption
+  - no_reboot_needed
+  - restrict_strategy
+  when:
+  - ensure_redhat_gpgkey_installed | bool
+  - high_severity | bool
+  - medium_complexity | bool
+  - medium_disruption | bool
+  - no_reboot_needed | bool
+  - restrict_strategy | bool
+
 - name: Read signatures in GPG key
-  command: gpg --show-keys --with-fingerprint --with-colons "/etc/pki/rpm-gpg/RPM-GPG-KEY-redhat-release"
+  command: gpg --show-keys --with-fingerprint --with-colons "{{ item.path }}"
   changed_when: false
   register: gpg_fingerprints
   check_mode: false
@@ -1714,10 +1745,12 @@
   - medium_disruption | bool
   - no_reboot_needed | bool
   - restrict_strategy | bool
+  with_items:
+    - "{{ rpm_gpg_files.files }}"
 
 - name: Set Fact - Installed GPG Fingerprints
   set_fact:
-    gpg_installed_fingerprints: '{{ gpg_fingerprints.stdout | regex_findall(''^pub.*
+    gpg_installed_fingerprints: '{{ item.stdout | regex_findall(''^pub.*
 
       (?:^fpr[:]*)([0-9A-Fa-f]*)'', ''\1'') | list }}'
   tags:
@@ -1743,10 +1776,11 @@
   - medium_disruption | bool
   - no_reboot_needed | bool
   - restrict_strategy | bool
+  with_items: "{{ gpg_fingerprints.results }}"
 
 - name: Set Fact - Valid fingerprints
   set_fact:
-    gpg_valid_fingerprints: ("567E347AD0044ADE55BA8A5F199E2F91FD431D51" "7E4624258C406535D56D6F135054E4A45A6340B3")
+    gpg_valid_fingerprints: ("567E347AD0044ADE55BA8A5F199E2F91FD431D51" "7E4624258C406535D56D6F135054E4A45A6340B3" "21CB256AE16FC54C6E652949702D426D350D275D" "705AA4112241850409087EBB7100DE3332B9822A")
   tags:
   - CCE-84180-9
   - CJIS-5.10.4.1
